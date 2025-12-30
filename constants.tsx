@@ -1,12 +1,11 @@
 
-import { AIModel, EmbeddingModel, RagInputs } from './types';
+import { AIModel, EmbeddingModel, RagInputs, RoiInputs, TranslationInputs } from './types';
 
 export const TRANSLATION_MODELS: AIModel[] = [
-  { id: 'gemini-3-pro', name: 'Gemini 3 Pro', provider: 'Google', costPerMillionChars: 15 },
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', costPerMillionChars: 12 },
-  { id: 'claude-3-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', costPerMillionChars: 10 },
-  { id: 'google-translate', name: 'Google Translation API', provider: 'Google Cloud', costPerMillionChars: 20 },
-  { id: 'deepl', name: 'DeepL Pro', provider: 'DeepL', costPerMillionChars: 25 },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'Google', costPerMillionChars: 0.15 },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', costPerMillionChars: 0.18 },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', costPerMillionChars: 2.50 },
+  { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', costPerMillionChars: 3.00 },
 ];
 
 export const INFERENCE_MODELS: AIModel[] = [
@@ -22,11 +21,15 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
   { id: 'text-embedding-3-large', name: 'text-embedding-3-large', costPerMillionTokens: 0.13, dimension: 3072 },
 ];
 
-export const DEFAULT_TRANSLATION_INPUTS = {
-  modelId: 'gemini-3-pro',
-  charsPerDoc: 2000,
-  numDocs: 500,
+export const DEFAULT_TRANSLATION_INPUTS: TranslationInputs = {
+  modelId: 'gemini-3-flash-preview',
+  charsPerDoc: 2500,
+  numDocs: 1000,
   monthlyGrowth: 5,
+  numLanguages: 2,
+  qualityTier: 'basic',
+  baseCostPer1kChars: 0.00015, // $0.15 per 1M chars
+  humanReviewCostPer1kChars: 0.05, // Labor cost for QA
 };
 
 export const DEFAULT_RAG_INPUTS: RagInputs = {
@@ -54,8 +57,25 @@ export const DEFAULT_RAG_INPUTS: RagInputs = {
   reindexFrequencyPerYear: 4,
 };
 
-export const DEFAULT_ROI_INPUTS = {
-  timeSavedPerQuery: 5,
-  employeeHourlyRate: 45,
-  numUsers: 50,
+export const DEFAULT_ROI_INPUTS: RoiInputs = {
+  // Productivity Drivers (Enterprise Baseline)
+  timeSavedPerQuery: 4,      // Conservative: 4 minutes
+  requestsPerUser: 120,    // 6 tasks per work day
+  employeeHourlyRate: 85,  // Fully loaded senior analyst / specialist
+  numUsers: 200,           // Mid-sized pilot or department
+  
+  // AI Inference Costs (Standard Enterprise Tier)
+  avgTokensPerRequest: 1800,
+  costPerMillionTokens: 2.50, // Blended cost for Pro-grade models
+  
+  // Infrastructure (Orchestration/RAG)
+  numIndexedDocs: 25000,
+  reindexingFrequency: 12,    // Monthly refresh
+  embeddingCostPerMillion: 0.10,
+  vectorDbBaseMonthly: 850,   // Production HA cluster + backups
+  
+  // Governance (The "Hidden" Cost)
+  percentOutputsReviewed: 5,  // Standard enterprise risk audit
+  reviewTimePerOutput: 4,     // Diligent quality check
+  reviewerHourlyRate: 110,    // Specialist QA / Auditor
 };

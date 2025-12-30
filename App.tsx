@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { CalculatorTab, TranslationInputs, RagInputs, RoiInputs } from './types';
 import { 
@@ -24,17 +23,33 @@ const App: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
-  const ASSUMED_QUERIES_PER_USER = 200;
-
   const currentAiMonthlyCost = useMemo(() => {
     if (activeTab === CalculatorTab.TRANSLATION) {
       return (transInputs.numDocs * transInputs.charsPerDoc * (transInputs.monthlyGrowth/100) / 1000000) * (TRANSLATION_MODELS.find(m => m.id === transInputs.modelId)?.costPerMillionChars || 0);
     }
+    
+    if (activeTab === CalculatorTab.ROI) {
+      // 1. Inference
+      const totalRequests = roiInputs.numUsers * roiInputs.requestsPerUser;
+      const inferenceCost = (totalRequests * roiInputs.avgTokensPerRequest / 1_000_000) * roiInputs.costPerMillionTokens;
+      
+      // 2. Orchestration
+      const reindexMonthlyCost = (roiInputs.numIndexedDocs * 800 / 1_000_000) * roiInputs.embeddingCostPerMillion * (roiInputs.reindexingFrequency / 12);
+      const dataCost = roiInputs.vectorDbBaseMonthly + reindexMonthlyCost;
+
+      // 3. Governance
+      const reviewedRequests = totalRequests * (roiInputs.percentOutputsReviewed / 100);
+      const governanceCost = (reviewedRequests * (roiInputs.reviewTimePerOutput / 60)) * roiInputs.reviewerHourlyRate;
+
+      return inferenceCost + dataCost + governanceCost;
+    }
+
+    // Default RAG tab logic
     return (ragInputs.queriesPerMonth * (ragInputs.avgQueryTokens + (ragInputs.retrievedChunks * (ragInputs.chunkSize))) / 1000000) * (INFERENCE_MODELS.find(m => m.id === ragInputs.inferenceModelId)?.costPerMillionInputTokens || 0);
-  }, [activeTab, transInputs, ragInputs]);
+  }, [activeTab, transInputs, ragInputs, roiInputs]);
 
   const projectionData = useMemo(() => {
-    const totalRequestsMonthly = roiInputs.numUsers * ASSUMED_QUERIES_PER_USER;
+    const totalRequestsMonthly = roiInputs.numUsers * roiInputs.requestsPerUser;
     const hoursSavedMonthly = (roiInputs.timeSavedPerQuery / 60) * totalRequestsMonthly;
     const monthlyValue = hoursSavedMonthly * roiInputs.employeeHourlyRate;
     
@@ -71,7 +86,7 @@ const App: React.FC = () => {
   }, [activeTab, transInputs, ragInputs, currentAiMonthlyCost, projectionData]);
 
   const renderInsight = (text: string) => {
-    if (!text) return <p className="text-slate-500 italic">No analysis available.</p>;
+    if (!text) return <p className="text-slate-900 italic font-bold">No analysis available.</p>;
     const isSingleParagraphTab = activeTab === CalculatorTab.RAG || activeTab === CalculatorTab.ROI;
     const lines = text.split('\n').filter(l => l.trim() !== '');
     
@@ -81,12 +96,12 @@ const App: React.FC = () => {
         return (
           <div key={i} className="mb-6 last:mb-0">
             <h4 className="font-bold text-slate-900 text-sm uppercase tracking-wide mb-1">{match[1]}</h4>
-            <p className="text-slate-600 text-sm leading-relaxed font-normal">{match[2]}</p>
+            <p className="text-slate-800 text-sm leading-relaxed font-semibold">{match[2]}</p>
           </div>
         );
       }
       return (
-        <p key={i} className={`text-slate-600 text-sm leading-relaxed mb-4 last:mb-0 ${isSingleParagraphTab ? 'italic' : ''}`}>
+        <p key={i} className={`text-slate-900 text-sm leading-relaxed mb-4 last:mb-0 font-bold ${isSingleParagraphTab ? 'italic' : ''}`}>
           {line.replace(/\*\*/g, '').replace(/^AI Strategic Brief:?\s*/i, '').replace(/^Executive Insight:?\s*/i, '')}
         </p>
       );
@@ -145,19 +160,24 @@ const App: React.FC = () => {
             <div>
               <h2 className="text-3xl font-extrabold text-slate-900">
                 {activeTab === CalculatorTab.TRANSLATION && "AI Translation Estimator"}
-                {activeTab === CalculatorTab.RAG && "RAG System"}
-                {activeTab === CalculatorTab.ROI && "Business ROI Simulator"}
+                {activeTab === CalculatorTab.RAG && "RAG System Economics"}
+                {activeTab === CalculatorTab.ROI && "AI Productivity ROI Simulator"}
               </h2>
-              <p className="text-slate-500 mt-2 max-w-2xl">
+              <p className="text-slate-700 mt-2 max-w-2xl font-semibold">
                 {activeTab === CalculatorTab.TRANSLATION && "Evaluate cost and scalability of AI translation to ensure it delivers real business value."}
-                {activeTab === CalculatorTab.RAG && "Model the end-to-end cost of a RAG system across its lifecycle."}
-                {activeTab === CalculatorTab.ROI && "Compare infrastructure costs against business value created by efficiency gains."}
+                {activeTab === CalculatorTab.RAG && "Model the end-to-end lifecycle costs of a RAG-based intelligence system."}
+                {activeTab === CalculatorTab.ROI && "Quantify the economic impact of AI time savings relative to ongoing operating costs."}
               </p>
+              {activeTab === CalculatorTab.ROI && (
+                <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">
+                  All values represent modeled productivity impact, not financial revenue.
+                </p>
+              )}
             </div>
             <button 
               onClick={triggerAnalysis}
               disabled={isAnalyzing}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-lg border border-slate-200 transition-colors shadow-sm disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-900 text-sm font-bold rounded-lg border border-slate-300 transition-colors shadow-sm disabled:opacity-50"
             >
               <svg className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -171,16 +191,16 @@ const App: React.FC = () => {
             {activeTab === CalculatorTab.RAG && <RagCalc inputs={ragInputs} setInputs={setRagInputs} />}
             {activeTab === CalculatorTab.ROI && <RoiPanel inputs={roiInputs} setInputs={setRoiInputs} aiCostMonthly={currentAiMonthlyCost} />}
             
-            <Card title={activeTab === CalculatorTab.RAG ? "AI Strategic Brief" : activeTab === CalculatorTab.ROI ? "Executive ROI Summary" : "Consultant Analysis"} className="border-slate-200 shadow-lg bg-white">
+            <Card title={activeTab === CalculatorTab.RAG ? "AI Strategic Brief" : activeTab === CalculatorTab.ROI ? "Executive ROI Interpretation" : "Consultant Analysis"} className="border-slate-300 shadow-lg bg-white">
               <div className="min-h-[60px]">
                 {isAnalyzing ? (
                   <div className="flex items-center gap-3 py-2">
                     <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
-                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
-                      <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse [animation-delay:-0.3s]"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse [animation-delay:-0.15s]"></div>
+                      <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse"></div>
                     </div>
-                    <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">Consulting Gemini...</span>
+                    <span className="text-slate-900 text-xs font-black uppercase tracking-wider">Consulting Gemini...</span>
                   </div>
                 ) : (
                   <div className="py-2">
@@ -193,8 +213,8 @@ const App: React.FC = () => {
         </main>
       )}
 
-      <footer className="mt-12 text-center text-slate-400 text-xs pb-8">
-        <p>© 2024 AI Economics Navigator. All estimates are projections based on current API pricing.</p>
+      <footer className="mt-12 text-center text-slate-600 text-xs pb-8 font-bold">
+        <p>© 2024 AI Economics Navigator. All estimates are projections based on current AI industry assumptions.</p>
       </footer>
     </div>
   );

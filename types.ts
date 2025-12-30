@@ -6,6 +6,8 @@ export enum CalculatorTab {
   ROI = 'ROI'
 }
 
+export type TranslationQualityTier = 'none' | 'basic' | 'full';
+
 export interface AIModel {
   id: string;
   name: string;
@@ -28,6 +30,10 @@ export interface TranslationInputs {
   charsPerDoc: number;
   numDocs: number;
   monthlyGrowth: number;
+  numLanguages: number;
+  qualityTier: TranslationQualityTier;
+  baseCostPer1kChars: number;
+  humanReviewCostPer1kChars: number;
 }
 
 export interface RagInputs {
@@ -61,7 +67,24 @@ export interface RagInputs {
 }
 
 export interface RoiInputs {
-  timeSavedPerQuery: number; // minutes
+  // Productivity Value Drivers
+  timeSavedPerQuery: number; 
+  requestsPerUser: number;   
   employeeHourlyRate: number;
   numUsers: number;
+
+  // 1. Inference Drivers
+  avgTokensPerRequest: number;
+  costPerMillionTokens: number;
+
+  // 2. Orchestration & Data Drivers
+  numIndexedDocs: number;
+  reindexingFrequency: number; // per year
+  embeddingCostPerMillion: number;
+  vectorDbBaseMonthly: number;
+
+  // 3. Governance Drivers
+  percentOutputsReviewed: number;
+  reviewTimePerOutput: number; // minutes
+  reviewerHourlyRate: number;
 }

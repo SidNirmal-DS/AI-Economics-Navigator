@@ -17,69 +17,100 @@ enum RagStep {
   GOVERN = 'GOVERN'
 }
 
+/**
+ * Normalizes input values to finite numbers, cleaning strings if necessary.
+ */
+const safeToNumber = (val: any, fallback: number = 0): number => {
+  if (typeof val === 'number') return Number.isFinite(val) ? val : fallback;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[$,\s]/g, '');
+    const parsed = parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+};
+
 export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
   const [activeStep, setActiveStep] = useState<RagStep>(RagStep.BUILD);
   
-  const selectedEmbedding = EMBEDDING_MODELS.find(m => m.id === inputs.ingestionModelId)!;
-  const selectedInference = INFERENCE_MODELS.find(m => m.id === inputs.inferenceModelId)!;
+  // Ensure selected models exist to prevent property access on undefined
+  const selectedEmbedding = EMBEDDING_MODELS.find(m => m.id === inputs.ingestionModelId) || EMBEDDING_MODELS[0];
+  const selectedInference = INFERENCE_MODELS.find(m => m.id === inputs.inferenceModelId) || INFERENCE_MODELS[0];
 
   const results = useMemo(() => {
+    // 1. Normalize all inputs safely
+    const numDocs = safeToNumber(inputs.numDocs);
+    const tokensPerDoc = safeToNumber(inputs.tokensPerDoc);
+    const parsingCostPerDoc = safeToNumber(inputs.parsingCostPerDoc);
+    const chunkSize = safeToNumber(inputs.chunkSize, 500); // chunk size should not be 0
+    const overlapPct = safeToNumber(inputs.overlapPct);
+    const metadataOverheadPct = safeToNumber(inputs.metadataOverheadPct);
+    
+    const queriesPerMonth = safeToNumber(inputs.queriesPerMonth);
+    const avgQueryTokens = safeToNumber(inputs.avgQueryTokens);
+    const retrievedChunks = safeToNumber(inputs.retrievedChunks);
+    const avgAnswerTokens = safeToNumber(inputs.avgAnswerTokens);
+    const cacheHitRatePct = safeToNumber(inputs.cacheHitRatePct);
+    const managedDbCostPer1kVectors = safeToNumber(inputs.managedDbCostPer1kVectors);
+    const rerankerCostPer1k = safeToNumber(inputs.rerankerCostPer1k);
+    
+    const monitoringCostPer1k = safeToNumber(inputs.monitoringCostPer1k);
+    const evalRunsPerMonth = safeToNumber(inputs.evalRunsPerMonth);
+    const evalTokensPerRun = safeToNumber(inputs.evalTokensPerRun);
+    const humanReviewHours = safeToNumber(inputs.humanReviewHours);
+    const humanHourlyRate = safeToNumber(inputs.humanHourlyRate);
+    const reindexFrequencyPerYear = safeToNumber(inputs.reindexFrequencyPerYear);
+
     // --- STEP 1: Build & Ingest ---
-    const totalTokensBase = inputs.numDocs * inputs.tokensPerDoc;
-    const effectiveTokensAfterOverlap = totalTokensBase * (1 + inputs.overlapPct / 100);
-    const totalChunks = Math.ceil(effectiveTokensAfterOverlap / inputs.chunkSize);
+    const totalTokensBase = numDocs * tokensPerDoc;
+    const effectiveTokensAfterOverlap = totalTokensBase * (1 + overlapPct / 100);
+    const totalChunks = Math.ceil(effectiveTokensAfterOverlap / chunkSize) || 0;
     
-    const oneTimeParsingCost = inputs.numDocs * inputs.parsingCostPerDoc;
-    const oneTimeEmbeddingCost = (effectiveTokensAfterOverlap / 1_000_000) * selectedEmbedding.costPerMillionTokens;
-    
+    const oneTimeParsingCost = numDocs * parsingCostPerDoc;
+    const embCostRate = safeToNumber(selectedEmbedding.costPerMillionTokens);
+    const oneTimeEmbeddingCost = (effectiveTokensAfterOverlap / 1_000_000) * embCostRate;
     const oneTimeSetupTotal = oneTimeParsingCost + oneTimeEmbeddingCost;
 
-    // Storage size estimation: vectors * dimension * 4 bytes/float + overhead
-    const vectorDataBytes = totalChunks * selectedEmbedding.dimension * 4;
-    const storageSizeGb = (vectorDataBytes * (1 + inputs.metadataOverheadPct / 100)) / (1024 * 1024 * 1024);
+    const vectorDataBytes = totalChunks * (safeToNumber(selectedEmbedding.dimension)) * 4;
+    const storageSizeGb = (vectorDataBytes * (1 + metadataOverheadPct / 100)) / (1024 * 1024 * 1024);
     
     // --- STEP 2: Run ---
-    const queryEmbeddingCostMonthly = (inputs.queriesPerMonth * inputs.avgQueryTokens / 1_000_000) * selectedEmbedding.costPerMillionTokens;
-    const dbOpsMonthly = (totalChunks / 1000) * inputs.managedDbCostPer1kVectors;
-    const rerankMonthly = inputs.rerankerEnabled ? (inputs.queriesPerMonth / 1000) * inputs.rerankerCostPer1k : 0;
+    const queryEmbeddingCostMonthly = (queriesPerMonth * avgQueryTokens / 1_000_000) * embCostRate;
+    const dbOpsMonthly = (totalChunks / 1000) * managedDbCostPer1kVectors;
+    const rerankMonthly = inputs.rerankerEnabled ? (queriesPerMonth / 1000) * rerankerCostPer1k : 0;
     
-    // Inference calculation
-    const tokensPerQueryIn = inputs.avgQueryTokens + (inputs.retrievedChunks * (inputs.chunkSize));
-    const tokensPerQueryOut = inputs.avgAnswerTokens;
+    const tokensPerQueryIn = avgQueryTokens + (retrievedChunks * chunkSize);
+    const cacheDiscount = cacheHitRatePct / 100;
+    const effectiveQueries = queriesPerMonth * (1 - cacheDiscount);
     
-    const cacheDiscount = inputs.cacheHitRatePct / 100;
-    const effectiveQueries = inputs.queriesPerMonth * (1 - cacheDiscount);
+    const infInputRate = safeToNumber(selectedInference.costPerMillionInputTokens);
+    const infOutputRate = safeToNumber(selectedInference.costPerMillionOutputTokens);
     
-    const monthlyInferenceInputCost = (effectiveQueries * tokensPerQueryIn / 1_000_000) * (selectedInference.costPerMillionInputTokens || 0);
-    const monthlyInferenceOutputCost = (effectiveQueries * tokensPerQueryOut / 1_000_000) * (selectedInference.costPerMillionOutputTokens || 0);
+    const monthlyInferenceInputCost = (effectiveQueries * tokensPerQueryIn / 1_000_000) * infInputRate;
+    const monthlyInferenceOutputCost = (effectiveQueries * avgAnswerTokens / 1_000_000) * infOutputRate;
     
     const monthlyOpsTotal = queryEmbeddingCostMonthly + dbOpsMonthly + rerankMonthly + monthlyInferenceInputCost + monthlyInferenceOutputCost;
-    const unitCostPerInteraction = monthlyOpsTotal / inputs.queriesPerMonth;
+    const unitCostPerInteraction = queriesPerMonth > 0 ? (monthlyOpsTotal / queriesPerMonth) : 0;
 
     // --- STEP 3: Govern & Improve ---
-    const monitoringMonthly = (inputs.queriesPerMonth / 1000) * inputs.monitoringCostPer1k;
-    const evalMonthly = (inputs.evalRunsPerMonth * inputs.evalTokensPerRun / 1_000_000) * (selectedInference.costPerMillionInputTokens || 0); // Assuming model-based eval
-    const humanMonthly = inputs.humanReviewHours * inputs.humanHourlyRate;
-    const reindexMonthly = (oneTimeSetupTotal * (inputs.reindexFrequencyPerYear / 12));
+    const monitoringMonthly = (queriesPerMonth / 1000) * monitoringCostPer1k;
+    const evalMonthly = (evalRunsPerMonth * evalTokensPerRun / 1_000_000) * infInputRate;
+    const humanMonthly = humanReviewHours * humanHourlyRate;
+    const reindexMonthly = oneTimeSetupTotal * (reindexFrequencyPerYear / 12);
     
     const monthlyGovernanceTotal = monitoringMonthly + evalMonthly + humanMonthly + reindexMonthly;
     
-    // Annualized calculation as requested: Setup + (Ops * 12) + (Gov * 12)
+    // Final Calculation: Setup + (Ops * 12) + (Gov * 12)
     const annualizedTotal = oneTimeSetupTotal + (monthlyOpsTotal * 12) + (monthlyGovernanceTotal * 12);
 
     return {
-      totalTokensBase,
-      effectiveTokensAfterOverlap,
-      totalChunks,
-      oneTimeParsingCost,
-      oneTimeEmbeddingCost,
-      storageSizeGb,
       oneTimeSetupTotal,
       monthlyOpsTotal,
-      unitCostPerInteraction,
       monthlyGovernanceTotal,
       annualizedTotal,
-      // specific breakouts for charts
+      unitCostPerInteraction,
+      totalChunks,
+      storageSizeGb,
       breakout: {
         parsing: oneTimeParsingCost,
         embedding: oneTimeEmbeddingCost,
@@ -98,12 +129,12 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
   ];
 
   const formatValue = (val: number | undefined | null) => {
-    if (val === undefined || val === null || isNaN(val)) return "—";
+    if (val === undefined || val === null || !Number.isFinite(val)) return "—";
     return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
   const formatUnitValue = (val: number | undefined | null) => {
-    if (val === undefined || val === null || isNaN(val)) return "—";
+    if (val === undefined || val === null || !Number.isFinite(val)) return "—";
     return `$${val.toFixed(3)}`;
   };
 
@@ -112,31 +143,30 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
       {/* Top Level Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-indigo-50 border-indigo-100">
-          <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Setup (One-time)</p>
+          <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Setup (One-time)</p>
           <h4 className="text-xl font-bold text-indigo-900">{formatValue(results.oneTimeSetupTotal)}</h4>
         </Card>
         <Card className="bg-emerald-50 border-emerald-100">
-          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Ops (Monthly)</p>
+          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Ops (Monthly)</p>
           <h4 className="text-xl font-bold text-emerald-900">{formatValue(results.monthlyOpsTotal)}</h4>
         </Card>
         <Card className="bg-amber-50 border-amber-100">
-          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Gov (Monthly)</p>
+          <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Gov (Monthly)</p>
           <h4 className="text-xl font-bold text-amber-900">{formatValue(results.monthlyGovernanceTotal)}</h4>
         </Card>
         <Card className="bg-slate-50 border-slate-200">
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Unit Cost</p>
+          <p className="text-[10px] font-bold text-slate-700 uppercase tracking-widest">Unit Cost</p>
           <h4 className="text-xl font-bold text-slate-900">{formatUnitValue(results.unitCostPerInteraction)}</h4>
         </Card>
-        <Card className="bg-slate-900 border-slate-800">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Annualized Total</p>
-          <h4 className="text-xl font-bold text-white">{formatValue(results.annualizedTotal)}</h4>
-          <p className="text-[8px] text-slate-500 mt-1 uppercase tracking-tight leading-tight">
+        <Card className="bg-indigo-100 border-indigo-300 ring-1 ring-indigo-200 shadow-sm">
+          <p className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Annualized Total</p>
+          <h4 className="text-2xl font-black text-indigo-900">{formatValue(results.annualizedTotal)}</h4>
+          <p className="text-[9px] text-indigo-700 mt-1 uppercase tracking-tight leading-tight font-bold">
             Total estimated annual cost (setup + 12 months of operation & governance)
           </p>
         </Card>
       </div>
 
-      {/* 3-Step Wizard Navigation */}
       <div className="flex border-b border-slate-200">
         {[
           { id: RagStep.BUILD, label: '1. Build & Ingest' },
@@ -158,7 +188,6 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Step Inputs */}
         <div className="lg:col-span-1 space-y-6">
           {activeStep === RagStep.BUILD && (
             <Card title="Step 1: Build & Ingest Settings">
@@ -175,10 +204,10 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
                 <select 
                   value={inputs.ingestionModelId}
                   onChange={(e) => setInputs({ ...inputs, ingestionModelId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-md p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-slate-300 rounded-md p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
                 >
                   {EMBEDDING_MODELS.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.dimension}d)</option>
+                    <option key={m.id} value={m.id} className="text-slate-900">{m.name}</option>
                   ))}
                 </select>
               </InputWrapper>
@@ -200,10 +229,10 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
                 <select 
                   value={inputs.inferenceModelId}
                   onChange={(e) => setInputs({ ...inputs, inferenceModelId: e.target.value })}
-                  className="w-full border border-slate-300 rounded-md p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full border border-slate-300 rounded-md p-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-900"
                 >
                   {INFERENCE_MODELS.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                    <option key={m.id} value={m.id} className="text-slate-900">{m.name}</option>
                   ))}
                 </select>
               </InputWrapper>
@@ -246,77 +275,55 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
           )}
         </div>
 
-        {/* Cost Breakdowns & Charts */}
         <div className="lg:col-span-2 space-y-6">
           <Card title={`${activeStep} Lifecycle Breakdown`}>
              <div className="space-y-4 mb-6">
-               {activeStep === RagStep.BUILD && (
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Effective Tokens</p>
-                      <p className="text-lg font-bold text-slate-900">{(results.effectiveTokensAfterOverlap / 1000).toFixed(0)}k</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Total Vectors</p>
-                      <p className="text-lg font-bold text-slate-900">{results.totalChunks.toLocaleString()}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Embedding Cost</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(results.oneTimeEmbeddingCost)}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Storage Size</p>
-                      <p className="text-lg font-bold text-slate-900">{results.storageSizeGb.toFixed(3)} GB</p>
-                    </div>
-                 </div>
-               )}
-
-               {activeStep === RagStep.RUN && (
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Context/Query</p>
-                      <p className="text-lg font-bold text-slate-900">{(inputs.retrievedChunks * inputs.chunkSize).toLocaleString()} tokens</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Monthly DB Ops</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(results.breakout.db)}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Unit Cost</p>
-                      <p className="text-lg font-bold text-slate-900">{formatUnitValue(results.unitCostPerInteraction)}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Cache Savings</p>
-                      <p className="text-lg font-bold text-slate-900">{inputs.cacheHitRatePct}%</p>
-                    </div>
-                 </div>
-               )}
-
-               {activeStep === RagStep.GOVERN && (
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Human Review</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(inputs.humanReviewHours * inputs.humanHourlyRate)}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Monitoring</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(inputs.queriesPerMonth / 1000 * inputs.monitoringCostPer1k)}</p>
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-lg">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">Evaluation</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(results.breakout.gov - (inputs.humanReviewHours * inputs.humanHourlyRate) - (inputs.queriesPerMonth / 1000 * inputs.monitoringCostPer1k))}</p>
-                    </div>
-                 </div>
-               )}
+                {activeStep === RagStep.BUILD && (
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-600 uppercase">Total Vectors</p>
+                       <p className="text-lg font-bold text-slate-900">{results.totalChunks.toLocaleString()}</p>
+                     </div>
+                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-600 uppercase">Storage Size</p>
+                       <p className="text-lg font-bold text-slate-900">{results.storageSizeGb.toFixed(3)} GB</p>
+                     </div>
+                  </div>
+                )}
+                {activeStep === RagStep.RUN && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-600 uppercase">Monthly DB Ops</p>
+                       <p className="text-lg font-bold text-slate-900">{formatValue(results.breakout.db)}</p>
+                     </div>
+                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-600 uppercase">Inference (Monthly)</p>
+                       <p className="text-lg font-bold text-slate-900">{formatValue(results.breakout.inference)}</p>
+                     </div>
+                  </div>
+                )}
+                {activeStep === RagStep.GOVERN && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                       <p className="text-[10px] font-bold text-slate-600 uppercase">Governance (Monthly)</p>
+                       <p className="text-lg font-bold text-slate-900">{formatValue(results.breakout.gov)}</p>
+                     </div>
+                  </div>
+                )}
              </div>
 
              <div className="h-[250px] w-full">
                <ResponsiveContainer width="100%" height="100%">
                  <BarChart data={summaryData}>
                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#475569' }} />
                    <YAxis hide />
-                   <Tooltip formatter={(v) => `$${Number(v).toFixed(2)}`} />
+                   <Tooltip 
+                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', color: '#1e293b' }}
+                     labelStyle={{ color: '#1e293b' }}
+                     itemStyle={{ color: '#1e293b' }}
+                     formatter={(v) => `$${Number(v).toFixed(0)}`} 
+                   />
                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                      {summaryData.map((entry, index) => (
                        <Cell key={`cell-${index}`} fill={entry.color} />
@@ -326,60 +333,8 @@ export const RagCalc: React.FC<Props> = ({ inputs, setInputs }) => {
                </ResponsiveContainer>
              </div>
           </Card>
-
-          <Card title="Strategic Decision Levers">
-            <div className="space-y-4">
-              {activeStep === RagStep.BUILD && (
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                  <p className="text-sm font-semibold text-blue-800 mb-2">Build Optimization</p>
-                  <ul className="text-xs text-blue-700 space-y-2 list-disc pl-4">
-                    <li>Reducing <strong>overlap</strong> directly lowers one-time embedding costs.</li>
-                    <li>Smaller <strong>chunk sizes</strong> increase retrieval precision but raise vector DB storage counts.</li>
-                    <li>Indexing only critical metadata saves storage bytes and retrieval latency.</li>
-                  </ul>
-                </div>
-              )}
-              {activeStep === RagStep.RUN && (
-                <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
-                  <p className="text-sm font-semibold text-emerald-800 mb-2">Ops Optimization</p>
-                  <ul className="text-xs text-emerald-700 space-y-2 list-disc pl-4">
-                    <li>Focus on <strong>Cache Hit Rate</strong>. Every 10% improvement drastically lowers inference OPEX.</li>
-                    <li>Limit <strong>Retrieved Chunks</strong> to the minimum required for accuracy to save input token costs.</li>
-                    <li>Consider using a 'Flash' model for simple queries and routing complex ones to 'Pro'.</li>
-                  </ul>
-                </div>
-              )}
-              {activeStep === RagStep.GOVERN && (
-                <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
-                  <p className="text-sm font-semibold text-amber-800 mb-2">Governance Levers</p>
-                  <ul className="text-xs text-amber-700 space-y-2 list-disc pl-4">
-                    <li>Use <strong>Model-based Eval</strong> to reduce expensive human review hours.</li>
-                    <li>Optimize re-indexing frequency; full re-indexes are costly setup events.</li>
-                    <li>Retention policies on vector metadata can control storage creep over time.</li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </Card>
         </div>
       </div>
-
-      <Card title="Current Lifecycle Assumptions">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-xs text-slate-600">
-          <div>
-            <p className="font-bold text-slate-800 mb-1">Build Assumption</p>
-            <p>Effective tokens are calculated as <strong>Base Tokens × (1 + Overlap %)</strong>. Each float32 vector element consumes 4 bytes of storage.</p>
-          </div>
-          <div>
-            <p className="font-bold text-slate-800 mb-1">Run Assumption</p>
-            <p>Inference cost reflects the volume after <strong>Cache Hit Rate</strong> reduction. Reranking is estimated at a per-1,000 query rate.</p>
-          </div>
-          <div>
-            <p className="font-bold text-slate-800 mb-1">Govern Assumption</p>
-            <p>Annualized re-indexing assumes a fraction of the initial setup cost recurring monthly based on frequency.</p>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 };
