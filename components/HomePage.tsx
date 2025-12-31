@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { CalculatorTab } from '../types';
 
@@ -20,33 +19,35 @@ export const HomePage: React.FC<Props> = ({ onNavigate }) => {
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center lg:text-left">
           <div className="max-w-4xl lg:max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-8">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-              <span className="text-[10px] font-black text-indigo-300 uppercase tracking-[0.2em]">Decision Support Intelligence</span>
-            </div>
-            
             <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.05] mb-8">
               Navigate the <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-blue-300">Economics</span> <br className="hidden md:block"/> of Intelligence.
             </h1>
             
             <p className="text-lg md:text-xl text-slate-400 leading-relaxed font-medium mb-10 max-w-2xl mx-auto lg:mx-0">
-              Operational realism for enterprise AI deployment. Measure impact, model hidden costs, and govern lifecycle value with financial precision.
+              Make AI economics visible before you commit to scale.
             </p>
             
-            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
-              <button 
-                onClick={() => onNavigate(CalculatorTab.ROI)}
-                className="px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2 group"
-              >
-                Simulate ROI
-                <span className="group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-              <button 
-                onClick={() => onNavigate(CalculatorTab.RAG)}
-                className="px-8 py-4 bg-slate-900/50 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600 font-bold rounded-xl transition-all backdrop-blur-sm"
-              >
-                Model RAG Costs
-              </button>
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-6">
+              <div className="relative group">
+                <div className="absolute inset-[-6px] rounded-2xl bg-white/5 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-0 shadow-2xl" />
+                <button 
+                  onClick={() => onNavigate(CalculatorTab.ROI)}
+                  className="relative z-10 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2 group/btn"
+                >
+                  Simulate ROI
+                  <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                </button>
+              </div>
+
+              <div className="relative group">
+                <div className="absolute inset-[-6px] rounded-2xl bg-white/5 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-0 shadow-2xl" />
+                <button 
+                  onClick={() => onNavigate(CalculatorTab.RAG)}
+                  className="relative z-10 px-8 py-4 bg-slate-900/50 hover:bg-slate-800 text-slate-300 border border-slate-700 hover:border-slate-600 font-bold rounded-xl transition-all backdrop-blur-sm"
+                >
+                  Model RAG Costs
+                </button>
+              </div>
             </div>
           </div>
         </div>

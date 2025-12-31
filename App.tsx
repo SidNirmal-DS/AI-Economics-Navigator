@@ -75,7 +75,7 @@ const App: React.FC = () => {
         context = "Translation Strategy";
         data = { ...transInputs, estimatedMonthlyCost: currentAiMonthlyCost };
       } else if (activeTab === CalculatorTab.RAG) {
-        context = "RAG System Lifecycle and Optimization";
+        context = "RAG System Economics";
         data = { ...ragInputs };
       }
       analysis = await getAiAnalysis(context, data);
@@ -102,7 +102,7 @@ const App: React.FC = () => {
       }
       return (
         <p key={i} className={`text-slate-900 text-sm leading-relaxed mb-4 last:mb-0 font-bold ${isSingleParagraphTab ? 'italic' : ''}`}>
-          {line.replace(/\*\*/g, '').replace(/^AI Strategic Brief:?\s*/i, '').replace(/^Executive Insight:?\s*/i, '')}
+          {line.replace(/\*\*/g, '').replace(/^AI Strategic Brief:?\s*/i, '').replace(/^Executive Insight:?\s*/i, '').replace(/^Simple Decision Brief:?\s*/i, '')}
         </p>
       );
     });
@@ -163,11 +163,19 @@ const App: React.FC = () => {
                 {activeTab === CalculatorTab.RAG && "RAG System Economics"}
                 {activeTab === CalculatorTab.ROI && "AI Productivity ROI Simulator"}
               </h2>
-              <p className="text-slate-700 mt-2 max-w-2xl font-semibold">
+              <div className="text-slate-700 mt-2 max-w-2xl font-semibold">
                 {activeTab === CalculatorTab.TRANSLATION && "Evaluate cost and scalability of AI translation to ensure it delivers real business value."}
-                {activeTab === CalculatorTab.RAG && "Model the end-to-end lifecycle costs of a RAG-based intelligence system."}
+                {activeTab === CalculatorTab.RAG && (
+                  <>
+                    <p className="mb-2">Model the costs of building a retrieval-augmented generation system that answers questions using your company’s internal documents.</p>
+                    <ul className="list-disc pl-5 text-sm space-y-1 text-indigo-600">
+                      <li>Documents are parsed, embedded, retrieved, and used to generate answers</li>
+                      <li>Costs come from ingestion, querying, and ongoing quality governance</li>
+                    </ul>
+                  </>
+                )}
                 {activeTab === CalculatorTab.ROI && "Quantify the economic impact of AI time savings relative to ongoing operating costs."}
-              </p>
+              </div>
               {activeTab === CalculatorTab.ROI && (
                 <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">
                   All values represent modeled productivity impact, not financial revenue.
@@ -180,7 +188,7 @@ const App: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-900 text-sm font-bold rounded-lg border border-slate-300 transition-colors shadow-sm disabled:opacity-50"
             >
               <svg className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15" />
               </svg>
               Update Analysis
             </button>
@@ -191,7 +199,7 @@ const App: React.FC = () => {
             {activeTab === CalculatorTab.RAG && <RagCalc inputs={ragInputs} setInputs={setRagInputs} />}
             {activeTab === CalculatorTab.ROI && <RoiPanel inputs={roiInputs} setInputs={setRoiInputs} aiCostMonthly={currentAiMonthlyCost} />}
             
-            <Card title={activeTab === CalculatorTab.RAG ? "AI Strategic Brief" : activeTab === CalculatorTab.ROI ? "Executive ROI Interpretation" : "Consultant Analysis"} className="border-slate-300 shadow-lg bg-white">
+            <Card title={activeTab === CalculatorTab.RAG ? "Simple Decision Brief" : activeTab === CalculatorTab.ROI ? "Executive ROI Interpretation" : "Consultant Analysis"} className="border-slate-300 shadow-lg bg-white">
               <div className="min-h-[60px]">
                 {isAnalyzing ? (
                   <div className="flex items-center gap-3 py-2">

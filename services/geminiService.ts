@@ -54,7 +54,15 @@ export const getAiAnalysis = async (scenario: string, data: any): Promise<string
       Message: Note that human review is an optional extra layer for accuracy that can be used where needed.
       Message: Emphasize that this setup allows teams to choose their own balance of speed and quality.`;
     } else if (isRag) {
-      prompt = `You are a Senior AI Product Leader. Generate a single concise paragraph (5-6 sentences) titled "AI Strategic Brief" interpreting these RAG economics: ${JSON.stringify(data)}. Focus on scaling risk and optimization levers. Tone: executive, neutral.`;
+      prompt = `You are an AI Product Leader. Generate a "Simple Decision Brief" for this RAG scenario: ${JSON.stringify(data)}.
+      Write exactly THREE short paragraphs.
+      Tone: executive, direct, neutral. Use plain business language.
+      Constraint: Do NOT use strategy jargon or academic phrasing.
+      Constraint: Do NOT use long sentences.
+      
+      Paragraph 1: Explain what the model is showing in simple terms (setup vs ongoing).
+      Paragraph 2: Explain why governance (review, tuning, monitoring) dominates cost over time instead of model tokens.
+      Paragraph 3: Explain when a RAG system makes sense (large doc base, frequent questions, accuracy needs).`;
     } else {
       prompt = `Provide a quick decision summary for: ${scenario}. Data: ${JSON.stringify(data)}. Format as: **ROI Signal**: ... **Optimization**: ... **Scaling Risk**: ...`;
     }
